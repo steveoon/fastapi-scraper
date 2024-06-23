@@ -17,11 +17,11 @@ async def scrape(urls: str):
             "model": "ollama/qwen2",
             "temperature": 0,
             "format": "json",
-            "base_url": "https://api13b.bitewise.cc",
+            "base_url": "http://localhost:11434",
         },
         "embeddings": {
             "model": "ollama/nomic-embed-text",
-            "base_url": "https://api13b.bitewise.cc",
+            "base_url": "http://localhost:11434",
         },
         "verbose": True,
     }
