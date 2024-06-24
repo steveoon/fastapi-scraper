@@ -7,8 +7,8 @@ import asyncio
 
 app = FastAPI()
 
-prompt = """
-I need to scrape the content from the provided URLs and organize the information into a structured JSON format. The JSON should include the following fields:
+prompt = """I need to scrape the content from the provided URLs and organize the information into a structured JSON 
+format. The JSON should include the following fields:
 
 1. **Title**: The main title or headline of the page.
 2. **Description**: A brief summary or description of the content.
@@ -16,8 +16,11 @@ I need to scrape the content from the provided URLs and organize the information
 4. **Author**: The name of the author or organization that published the content.
 5. **Content**: The main body of the content, organized into paragraphs or sections.
 6. **Tags**: Relevant tags or categories that describe the content.
+7. **URL**: The URL from which the content was scraped.
 
-Make sure to accurately categorize the information and ensure that the content is valuable and relevant. If any field is not available, return an empty string for that field. The output should be a list of objects in JSON format, where each object corresponds to one of the provided URLs.
+Make sure to accurately categorize the information and ensure that the content is valuable and relevant. If any field 
+is not available, return an empty string for that field. The output should be a list of objects in JSON format, 
+where each object corresponds to one of the provided URLs.
 
 Here is an example of the expected JSON format:
 
@@ -28,7 +31,8 @@ Here is an example of the expected JSON format:
         "date": "2024-06-24",
         "author": "John Doe",
         "content": "This is the main body of the content, organized into paragraphs or sections.",
-        "tags": ["tag1", "tag2"]
+        "tags": ["tag1", "tag2"],
+        "url": "https://example.com/project1"
     },
     ...
 ]
@@ -47,27 +51,27 @@ class Project(BaseModel):
     author: Optional[str] = Field(description="The name of the author or organization that published the content")
     content: str = Field(description="The main body of the content, organized into paragraphs or sections")
     tags: List[str] = Field(description="Relevant tags or categories that describe the content")
+    url: str = Field(description="The URL from which the content was scraped")
 
 
 class Projects(BaseModel):
     projects: List[Project]
 
 
-def preprocess_result(result):
-    for project in result.get('projects', []):
-        if project.get('title') is None:
-            project['title'] = ""
-        if project.get('description') is None:
-            project['description'] = ""
-        if project.get('date') is None:
-            project['date'] = ""
-        if project.get('author') is None:
-            project['author'] = ""
-        if project.get('content') is None:
-            project['content'] = ""
-        if project.get('tags') is None:
-            project['tags'] = []
-    return result
+def preprocess_result(result, urls):
+    preprocessed_projects = []
+    for project, url in zip(result.get('projects', []), urls):
+        preprocessed_project = {
+            'title': project.get('title', ""),
+            'description': project.get('description', ""),
+            'date': project.get('date', ""),
+            'author': project.get('author', ""),
+            'content': project.get('content', ""),
+            'tags': project.get('tags', []),
+            'url': url
+        }
+        preprocessed_projects.append(preprocessed_project)
+    return {'projects': preprocessed_projects}
 
 
 @app.get("/api/smart-scraper")
@@ -106,7 +110,7 @@ async def scrape(urls: str):
         result = await loop.run_in_executor(None, smart_scraper_graph.run)
 
         # 预处理结果以确保所有字段有效
-        preprocessed_result = preprocess_result(result)
+        preprocessed_result = preprocess_result(result, urls)
 
         # Validate the result with the defined schema
         validated_result = Projects(**preprocessed_result)
