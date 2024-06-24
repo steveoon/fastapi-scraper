@@ -1,9 +1,73 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+from typing import List, Optional
 from scrapegraphai.graphs import SmartScraperMultiGraph
 import asyncio
 
 app = FastAPI()
+
+prompt = """
+I need to scrape the content from the provided URLs and organize the information into a structured JSON format. The JSON should include the following fields:
+
+1. **Title**: The main title or headline of the page.
+2. **Description**: A brief summary or description of the content.
+3. **Date**: The date when the content was published or last updated.
+4. **Author**: The name of the author or organization that published the content.
+5. **Content**: The main body of the content, organized into paragraphs or sections.
+6. **Tags**: Relevant tags or categories that describe the content.
+
+Make sure to accurately categorize the information and ensure that the content is valuable and relevant. If any field is not available, return an empty string for that field. The output should be a list of objects in JSON format, where each object corresponds to one of the provided URLs.
+
+Here is an example of the expected JSON format:
+
+[
+    {
+        "title": "Example Title",
+        "description": "This is a brief description of the content.",
+        "date": "2024-06-24",
+        "author": "John Doe",
+        "content": "This is the main body of the content, organized into paragraphs or sections.",
+        "tags": ["tag1", "tag2"]
+    },
+    ...
+]
+
+Please make sure the extracted information is accurate and well-organized.
+"""
+
+
+# ************************************************
+# Define the configuration for the graph
+# ************************************************
+class Project(BaseModel):
+    title: str = Field(description="The title of the project")
+    description: str = Field(description="The description of the project")
+    date: Optional[str] = Field(description="The date when the content was published or last updated")
+    author: Optional[str] = Field(description="The name of the author or organization that published the content")
+    content: str = Field(description="The main body of the content, organized into paragraphs or sections")
+    tags: List[str] = Field(description="Relevant tags or categories that describe the content")
+
+
+class Projects(BaseModel):
+    projects: List[Project]
+
+
+def preprocess_result(result):
+    for project in result.get('projects', []):
+        if project.get('title') is None:
+            project['title'] = ""
+        if project.get('description') is None:
+            project['description'] = ""
+        if project.get('date') is None:
+            project['date'] = ""
+        if project.get('author') is None:
+            project['author'] = ""
+        if project.get('content') is None:
+            project['content'] = ""
+        if project.get('tags') is None:
+            project['tags'] = []
+    return result
 
 
 @app.get("/api/smart-scraper")
@@ -14,22 +78,26 @@ async def scrape(urls: str):
 
     graph_config = {
         "llm": {
-            "model": "ollama/qwen2",
+            "model": "ollama/mistral",
             "temperature": 0,
             "format": "json",
+            "model_tokens": 2000,
             "base_url": "http://localhost:11434",
         },
         "embeddings": {
             "model": "ollama/nomic-embed-text",
+            "temperature": 0,
             "base_url": "http://localhost:11434",
         },
         "verbose": True,
+        "headless": False
     }
 
     try:
         smart_scraper_graph = SmartScraperMultiGraph(
-            prompt="List me all the projects with their descriptions",
+            prompt=prompt,
             source=urls,
+            schema=Projects,
             config=graph_config,
         )
 
@@ -37,12 +105,15 @@ async def scrape(urls: str):
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, smart_scraper_graph.run)
 
-        if not isinstance(result, dict):
-            raise ValueError("Result is not a valid JSON object")
+        # 预处理结果以确保所有字段有效
+        preprocessed_result = preprocess_result(result)
 
-        print("🧚‍♀️ Scraping result:", result)
+        # Validate the result with the defined schema
+        validated_result = Projects(**preprocessed_result)
 
-        return JSONResponse(content=result)
+        print("🧚‍Scraping result:", validated_result)
+
+        return JSONResponse(content=validated_result.dict())
     except Exception as e:
-        print("🧚‍♀️ Error:", str(e))
+        print("🧚‍Error:", str(e))
         return JSONResponse(content={"error": str(e)}, status_code=500)
