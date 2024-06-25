@@ -4,6 +4,13 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from scrapegraphai.graphs import SmartScraperMultiGraph
 import asyncio
+import json
+from aiomultiprocess import Pool
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+openai_key = os.getenv("OPENAI_APIKEY")
 
 app = FastAPI()
 
@@ -60,7 +67,7 @@ class Projects(BaseModel):
 
 def preprocess_result(result, urls):
     preprocessed_projects = []
-    for project, url in zip(result.get('projects', []), urls):
+    for project in result['projects']:
         preprocessed_project = {
             'title': project.get('title', ""),
             'description': project.get('description', ""),
@@ -68,10 +75,27 @@ def preprocess_result(result, urls):
             'author': project.get('author', ""),
             'content': project.get('content', ""),
             'tags': project.get('tags', []),
-            'url': url
+            'url': project.get('url', "")
         }
         preprocessed_projects.append(preprocessed_project)
     return {'projects': preprocessed_projects}
+
+
+def run_smart_scraper_graph(prompt, urls, graph_config):
+    smart_scraper_graph = SmartScraperMultiGraph(
+        prompt=prompt,
+        source=urls,
+        schema=Projects,  # 这里传递的是Projects类
+        config=graph_config,
+    )
+    result = smart_scraper_graph.run()
+    return result
+
+
+async def async_run_smart_scraper_graph(prompt, urls, graph_config):
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, run_smart_scraper_graph, prompt, urls, graph_config)
+    return result
 
 
 @app.get("/api/smart-scraper")
@@ -80,34 +104,49 @@ async def scrape(urls: str):
     if not urls:
         raise HTTPException(status_code=400, detail="No URLs provided")
 
+    # graph_config = {
+    #     "llm": {
+    #         "model": "ollama/mistral",
+    #         "temperature": 0,
+    #         "format": "json",
+    #         "model_tokens": 2000,
+    #         "base_url": "http://localhost:11434",
+    #     },
+    #     "embeddings": {
+    #         "model": "ollama/nomic-embed-text",
+    #         "temperature": 0,
+    #         "base_url": "http://localhost:11434",
+    #     },
+    #     "verbose": True,
+    #     "headless": False
+    # }
     graph_config = {
         "llm": {
-            "model": "ollama/mistral",
+            "api_key": openai_key,
+            "model": "gpt-3.5-turbo",
             "temperature": 0,
-            "format": "json",
-            "model_tokens": 2000,
-            "base_url": "http://localhost:11434",
-        },
-        "embeddings": {
-            "model": "ollama/nomic-embed-text",
-            "temperature": 0,
-            "base_url": "http://localhost:11434",
+            "max_tokens": 1000,
+            "base_url": "https://api.ohmygpt.com/v1",
         },
         "verbose": True,
-        "headless": False
+        "headless": False,
     }
 
     try:
-        smart_scraper_graph = SmartScraperMultiGraph(
-            prompt=prompt,
-            source=urls,
-            schema=Projects,
-            config=graph_config,
-        )
+        async with Pool() as pool:
+            results = await pool.starmap(
+                async_run_smart_scraper_graph, [(prompt, urls, graph_config)]
+            )
 
-        # 使用当前时间循环运行异步函数
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, smart_scraper_graph.run)
+        # 因为starmap返回的是列表，所以需要取第一个元素
+        result = results[0]
+
+        # 打印结果进行调试
+        print("Scraper raw result:", result)
+
+        # 解析result，确保它是一个字典
+        if isinstance(result, str):
+            result = json.loads(result)
 
         # 预处理结果以确保所有字段有效
         preprocessed_result = preprocess_result(result, urls)
