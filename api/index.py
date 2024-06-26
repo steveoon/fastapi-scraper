@@ -114,38 +114,36 @@ async def scrape(urls: str):
     if not urls:
         raise HTTPException(status_code=400, detail="No URLs provided")
 
-    # graph_config = {
-    #     "llm": {
-    #         "model": "ollama/mistral",
-    #         "temperature": 0,
-    #         "format": "json",
-    #         "model_tokens": 2000,
-    #         "base_url": "http://localhost:11434",
-    #     },
-    #     "embeddings": {
-    #         "model": "ollama/nomic-embed-text",
-    #         "temperature": 0,
-    #         "base_url": "http://localhost:11434",
-    #     },
-    #     "verbose": True,
-    #     "headless": False
-    # }
     graph_config = {
         "llm": {
-            "api_key": openai_key,
+            "api_key": openai_real_key,
             "model": "gpt-4o",
-            "temperature": 0,
-            "max_tokens": 2000,
-            "base_url": "https://api.ohmygpt.com/v1",
+            "max_tokens": 1200,
         },
         "embeddings": {
-            "api_key": openai_real_key,
-            "model": "openai-text-embedding-3-small",
+            "model": "ollama/mxbai-embed-large",
             "temperature": 0,
+            "base_url": "http://localhost:11434",
         },
         "verbose": True,
-        "headless": False,
+        "headless": False
     }
+    # graph_config = {
+    #     "llm": {
+    #         "api_key": openai_key,
+    #         "model": "gpt-4o",
+    #         "temperature": 0,
+    #         "max_tokens": 2000,
+    #         "base_url": "https://api.ohmygpt.com/v1",
+    #     },
+    #     "embeddings": {
+    #         "api_key": openai_real_key,
+    #         "model": "openai-text-embedding-3-small",
+    #         "temperature": 0,
+    #     },
+    #     "verbose": True,
+    #     "headless": False,
+    # }
 
     try:
         async with Pool() as pool:
