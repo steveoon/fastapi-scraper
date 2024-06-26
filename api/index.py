@@ -9,8 +9,10 @@ from aiomultiprocess import Pool
 from dotenv import load_dotenv
 import os
 
+# Load environment variables
 load_dotenv()
 openai_key = os.getenv("OPENAI_APIKEY")
+openai_real_key = os.getenv("OPENAI_REAL_APIKEY")
 
 app = FastAPI()
 
@@ -48,9 +50,6 @@ Please make sure the extracted information is accurate and well-organized.
 """
 
 
-# ************************************************
-# Define the configuration for the graph
-# ************************************************
 class Project(BaseModel):
     title: str = Field(description="The title of the project")
     description: str = Field(description="The description of the project")
@@ -81,10 +80,10 @@ def preprocess_result(result, urls):
     return {'projects': preprocessed_projects}
 
 
-def run_smart_scraper_graph(prompt, urls, graph_config):
+def run_smart_scraper_graph(prompt, url, graph_config):
     smart_scraper_graph = SmartScraperMultiGraph(
         prompt=prompt,
-        source=urls,
+        source=[url],
         schema=Projects,  # 这里传递的是Projects类
         config=graph_config,
     )
@@ -92,9 +91,9 @@ def run_smart_scraper_graph(prompt, urls, graph_config):
     return result
 
 
-async def async_run_smart_scraper_graph(prompt, urls, graph_config):
+async def async_run_smart_scraper_graph(prompt, url, graph_config):
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, run_smart_scraper_graph, prompt, urls, graph_config)
+    result = await loop.run_in_executor(None, run_smart_scraper_graph, prompt, url, graph_config)
     return result
 
 
@@ -123,10 +122,15 @@ async def scrape(urls: str):
     graph_config = {
         "llm": {
             "api_key": openai_key,
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4o",
             "temperature": 0,
-            "max_tokens": 1000,
+            "max_tokens": 2000,
             "base_url": "https://api.ohmygpt.com/v1",
+        },
+        "embeddings": {
+            "api_key": openai_real_key,
+            "model": "openai-text-embedding-3-small",
+            "temperature": 0,
         },
         "verbose": True,
         "headless": False,
@@ -134,22 +138,25 @@ async def scrape(urls: str):
 
     try:
         async with Pool() as pool:
-            results = await pool.starmap(
-                async_run_smart_scraper_graph, [(prompt, urls, graph_config)]
-            )
+            results = []
+            for url in urls:
+                try:
+                    result = await pool.apply(async_run_smart_scraper_graph, args=(prompt, url, graph_config))
+                    # 解析result，确保它是一个字典
+                    if isinstance(result, str):
+                        result = json.loads(result)
+                    results.append(result)
+                except Exception as e:
+                    print(f"Skipping URL due to error: {url}, Error: {str(e)}")
+                    continue
 
-        # 因为starmap返回的是列表，所以需要取第一个元素
-        result = results[0]
-
-        # 打印结果进行调试
-        print("Scraper raw result:", result)
-
-        # 解析result，确保它是一个字典
-        if isinstance(result, str):
-            result = json.loads(result)
+        # 合并所有结果
+        combined_results = {"projects": []}
+        for result in results:
+            combined_results["projects"].extend(result['projects'])
 
         # 预处理结果以确保所有字段有效
-        preprocessed_result = preprocess_result(result, urls)
+        preprocessed_result = preprocess_result(combined_results, urls)
 
         # Validate the result with the defined schema
         validated_result = Projects(**preprocessed_result)
