@@ -97,6 +97,17 @@ async def async_run_smart_scraper_graph(prompt, url, graph_config):
     return result
 
 
+async def scrape_single_url(url, prompt, graph_config):
+    try:
+        result = await async_run_smart_scraper_graph(prompt, url, graph_config)
+        if isinstance(result, str):
+            result = json.loads(result)
+        return result
+    except Exception as e:
+        print(f"Skipping URL due to error: {url}, Error: {str(e)}")
+        return None
+
+
 @app.get("/api/smart-scraper")
 async def scrape(urls: str):
     urls = urls.split(",")
@@ -138,21 +149,15 @@ async def scrape(urls: str):
 
     try:
         async with Pool() as pool:
-            results = []
-            for url in urls:
-                try:
-                    result = await pool.apply(async_run_smart_scraper_graph, args=(prompt, url, graph_config))
-                    # 解析result，确保它是一个字典
-                    if isinstance(result, str):
-                        result = json.loads(result)
-                    results.append(result)
-                except Exception as e:
-                    print(f"Skipping URL due to error: {url}, Error: {str(e)}")
-                    continue
+            tasks = [pool.apply(scrape_single_url, args=(url, prompt, graph_config)) for url in urls]
+            results = await asyncio.gather(*tasks)
+
+        # 过滤掉 None 的结果
+        valid_results = [result for result in results if result is not None]
 
         # 合并所有结果
         combined_results = {"projects": []}
-        for result in results:
+        for result in valid_results:
             combined_results["projects"].extend(result['projects'])
 
         # 预处理结果以确保所有字段有效
