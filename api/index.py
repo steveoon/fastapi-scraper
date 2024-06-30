@@ -16,37 +16,36 @@ openai_real_key = os.getenv("OPENAI_REAL_APIKEY")
 
 app = FastAPI()
 
-prompt = """I need to scrape the content from the provided URLs and organize the information into a structured JSON 
-format. The JSON should include the following fields:
+prompt = """请从给定的URL中抓取内容，并组织成结构化的JSON格式。JSON应包含以下字段：
 
-1. **Title**: The main title or headline of the page.
-2. **Description**: A brief summary or description of the content.
-3. **Date**: The date when the content was published or last updated.
-4. **Author**: The name of the author or organization that published the content.
-5. **Content**: The main body of the content, organized into paragraphs or sections.
-6. **Tags**: Relevant tags or categories that describe the content.
-7. **URL**: The URL from which the content was scraped.
+1. **Title**: 页面的主标题或头条。
+2. **Description**: 内容的简要摘要或描述。
+3. **Date**: 内容发布或最后更新的日期。
+4. **Author**: 发布内容的作者或组织名称。
+5. **Content**: 主要内容，按段落或部分组织。
+6. **Tags**: 描述内容的相关标签或类别。
+7. **URL**: 抓取内容的URL。
 
-Make sure to accurately categorize the information and ensure that the content is valuable and relevant. If any field 
-is not available, return an empty string for that field. The output should be a list of objects in JSON format, 
-where each object corresponds to one of the provided URLs.
+请确保信息准确分类，内容有价值且相关。如某字段缺失，返回空字符串。输出应为JSON格式对象列表，每个对象对应的URL应是其爬取内容页面的URL。
 
-Here is an example of the expected JSON format:
+请尽量精简回复内容，控制字数在1000以内，确保每个字段的内容简明扼要。
+
+示例JSON格式：
 
 [
     {
-        "title": "Example Title",
-        "description": "This is a brief description of the content.",
+        "title": "示例标题",
+        "description": "这是内容的简要描述。",
         "date": "2024-06-24",
-        "author": "John Doe",
-        "content": "This is the main body of the content, organized into paragraphs or sections.",
-        "tags": ["tag1", "tag2"],
+        "author": "张三",
+        "content": "这是主要内容，按段落或部分组织。",
+        "tags": ["标签1", "标签2"],
         "url": "https://example.com/project1"
     },
     ...
 ]
 
-Please make sure the extracted information is accurate and well-organized.
+请确保提取的信息准确且组织良好。
 """
 
 
@@ -118,13 +117,15 @@ async def scrape(urls: str):
         "llm": {
             "api_key": openai_real_key,
             "model": "gpt-4o",
-            "max_tokens": 1200,
+            "max_tokens": 1000,
         },
         "embeddings": {
             "model": "ollama/mxbai-embed-large",
             "temperature": 0,
             "base_url": "http://localhost:11434",
         },
+        "max_depth": 2,
+        "max_nodes": 50,
         "verbose": True,
         "headless": False
     }
