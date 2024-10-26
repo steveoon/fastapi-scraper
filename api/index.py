@@ -52,10 +52,18 @@ prompt = """请从给定的URL中抓取内容，并组织成结构化的JSON格�
 class Project(BaseModel):
     title: str = Field(description="The title of the project")
     description: str = Field(description="The description of the project")
-    date: Optional[str] = Field(description="The date when the content was published or last updated")
-    author: Optional[str] = Field(description="The name of the author or organization that published the content")
-    content: str = Field(description="The main body of the content, organized into paragraphs or sections")
-    tags: List[str] = Field(description="Relevant tags or categories that describe the content")
+    date: Optional[str] = Field(
+        description="The date when the content was published or last updated"
+    )
+    author: Optional[str] = Field(
+        description="The name of the author or organization that published the content"
+    )
+    content: str = Field(
+        description="The main body of the content, organized into paragraphs or sections"
+    )
+    tags: List[str] = Field(
+        description="Relevant tags or categories that describe the content"
+    )
     url: str = Field(description="The URL from which the content was scraped")
 
 
@@ -65,18 +73,18 @@ class Projects(BaseModel):
 
 def preprocess_result(result, urls):
     preprocessed_projects = []
-    for project in result['projects']:
+    for project in result["projects"]:
         preprocessed_project = {
-            'title': project.get('title', ""),
-            'description': project.get('description', ""),
-            'date': project.get('date', ""),
-            'author': project.get('author', ""),
-            'content': project.get('content', ""),
-            'tags': project.get('tags', []),
-            'url': project.get('url', "")
+            "title": project.get("title", ""),
+            "description": project.get("description", ""),
+            "date": project.get("date", ""),
+            "author": project.get("author", ""),
+            "content": project.get("content", ""),
+            "tags": project.get("tags", []),
+            "url": project.get("url", ""),
         }
         preprocessed_projects.append(preprocessed_project)
-    return {'projects': preprocessed_projects}
+    return {"projects": preprocessed_projects}
 
 
 def run_smart_scraper_graph(prompt, url, graph_config):
@@ -92,7 +100,9 @@ def run_smart_scraper_graph(prompt, url, graph_config):
 
 async def async_run_smart_scraper_graph(prompt, url, graph_config):
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, run_smart_scraper_graph, prompt, url, graph_config)
+    result = await loop.run_in_executor(
+        None, run_smart_scraper_graph, prompt, url, graph_config
+    )
     return result
 
 
@@ -115,10 +125,13 @@ async def scrape(urls: str):
 
     graph_config = {
         "llm": {
-            "api_key": openai_real_key,
+            "api_key": openai_key,
             "model": "gpt-4o",
-            "max_tokens": 1000,
+            "max_tokens": 2000,
+            "base_url": "https://api.gptsapi.net/v1",
         },
+        "verbose": True,
+        "headless": False,
         "embeddings": {
             "model": "ollama/mxbai-embed-large",
             "temperature": 0,
@@ -127,7 +140,7 @@ async def scrape(urls: str):
         "max_depth": 2,
         "max_nodes": 50,
         "verbose": True,
-        "headless": False
+        "headless": False,
     }
     # graph_config = {
     #     "llm": {
@@ -148,7 +161,10 @@ async def scrape(urls: str):
 
     try:
         async with Pool() as pool:
-            tasks = [pool.apply(scrape_single_url, args=(url, prompt, graph_config)) for url in urls]
+            tasks = [
+                pool.apply(scrape_single_url, args=(url, prompt, graph_config))
+                for url in urls
+            ]
             results = await asyncio.gather(*tasks)
 
         # 过滤掉 None 的结果
@@ -157,7 +173,7 @@ async def scrape(urls: str):
         # 合并所有结果
         combined_results = {"projects": []}
         for result in valid_results:
-            combined_results["projects"].extend(result['projects'])
+            combined_results["projects"].extend(result["projects"])
 
         # 预处理结果以确保所有字段有效
         preprocessed_result = preprocess_result(combined_results, urls)
